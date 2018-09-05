@@ -1,0 +1,20 @@
+{
+  "name": "aht-server",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "dotenv": "^6.0.0",
+    "express": "^4.16.3",
+    "firebase-admin": "^6.0.0",
+    "request-promise": "^4.2.2",
+    "simple-oauth2": "^2.2.1",
+    "twit": "^2.2.11",
+    "underscore": "^1.9.1"
+  }
+}
