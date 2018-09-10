@@ -3,6 +3,7 @@ const PORT = process.env.PORT || 5000
 const rp = require("request-promise")
 const simple_oauth2 = require("simple-oauth2")
 const express = require("express")
+const bodyParser = require("body-parser")
 const path = require("path")
 const _ = require("underscore")
 const async = require("async")
@@ -41,10 +42,65 @@ let T = new Twit({
 })
 
 let app = express()
+app.use(bodyParser.urlencoded({ extended: false }))
+app.use(bodyParser.json())
 
 let access = { following: {}, discord: {} }
 
 class util {
+  static async registerHistory(payment) {
+    return await firestore
+      .collection("history")
+      .doc(`${payment.date}_${payment.to}_admin`)
+      .set({
+        amount: payment.amount,
+        type: "outsource",
+        payment_from: "admin",
+        payment_to: payment.to,
+        reason: payment.what_for,
+        photoURL: payment.photoURL,
+        displayName: payment.displayName,
+        uid: payment.to,
+        date: payment.date
+      })
+  }
+  static async addToUserHistory(payment) {
+    await firestore
+      .collection("users")
+      .doc(payment.to)
+      .collection("history")
+      .doc(`${payment.date}_outsource`)
+      .set({
+        amount: payment.amount,
+        type: "outsource",
+        payment_from: "admin",
+        payment_to: payment.to,
+        reason: payment.what_for,
+        photoURL: payment.photoURL,
+        displayName: payment.displayName,
+        uid: payment.to,
+        date: payment.date
+      })
+    let amount = await firestore
+      .collection("users_server")
+      .doc(payment.to)
+      .get()
+      .then(ss => {
+        return ss.data().amount || {}
+      })
+    if (amount.aht == undefined) {
+      amount.aht = { paid: 0, earned: 0 }
+    }
+    amount.aht.earned += payment.amount
+    await firestore
+      .collection("users_server")
+      .doc(payment.to)
+      .update({
+        amount: amount
+      })
+    return
+  }
+
   static async existsDiscordUser(user) {
     let ss = await firestore
       .collection("discord_pool")
@@ -52,6 +108,7 @@ class util {
       .get()
     return ss.exists
   }
+
   static async getDiscordUserFromPool(userid) {
     let ss = await firestore
       .collection("discord_pool")
@@ -59,6 +116,7 @@ class util {
       .get()
     return ss.data()
   }
+
   static async addDiscordUserToPool(user) {
     return await firestore
       .collection("discord_pool")
@@ -68,6 +126,7 @@ class util {
         console.log(e)
       })
   }
+
   static async removeDiscordUserFromPool(user) {
     return await firestore
       .collection("discord_pool")
@@ -88,6 +147,7 @@ class util {
     })
     return JSON.parse(body) || []
   }
+
   static async getCredentials(userid) {
     let ss = await firestore
       .collection("users_server")
@@ -95,6 +155,7 @@ class util {
       .get()
     return ss.data()
   }
+
   static async getFriendship(target) {
     return new Promise((ret, rej) => {
       T.get(
@@ -113,12 +174,14 @@ class util {
       )
     })
   }
+
   static async removeDiscordUser(uid) {
     return await firestore
       .collection("users_server")
       .doc(uid)
       .update({ discord: admin.firestore.FieldValue.delete() })
   }
+
   static async setDiscordUser(uid, user) {
     try {
       await firestore
@@ -133,12 +196,14 @@ class util {
     }
     return
   }
+
   static async getDiscordTokens(code) {
     return await oauth2_discord.authorizationCode.getToken({
       code: code,
       redirect_uri: `${process.env.BACKEND_SERVER_ORIGIN}/oauth/discord`
     })
   }
+
   static async getDiscordUser(access_token) {
     return JSON.parse(
       await rp({
@@ -150,6 +215,7 @@ class util {
       })
     )
   }
+
   static isTooShort(type, uid, res) {
     if (
       access[type][uid] != undefined &&
@@ -160,6 +226,7 @@ class util {
     }
     return null
   }
+
   static isErr(e, code, res, cb) {
     if (e != null) {
       res.send({ error: 2 })
@@ -167,8 +234,16 @@ class util {
       cb()
     }
   }
+
   static setAccess(type, uid) {
     access[type][uid] = Date.now()
+  }
+
+  static checkAdmin(twitter_id) {
+    return (
+      process.env.ADMIN_TWITTER_ID != undefined &&
+      process.env.ADMIN_TWITTER_ID === twitter_id
+    )
   }
 
   static checkRandom_Value(user_id, random_value, res) {
@@ -253,6 +328,30 @@ app.post("/alishackers/remove/discord/:uid/:random_value", async (req, res) => {
   }
 })
 
+app.post("/alishackers/payment", async (req, res) => {
+  try {
+    await util.checkRandom_Value(req.body.uid, req.body.random_value)
+    if (util.checkAdmin(req.body.twitter_id) !== true) {
+      throw "not admin"
+    }
+    let payment_date = Date.now()
+    let payment = {
+      photoURL: req.body.photoURL,
+      displayName: req.body.displayName,
+      date: payment_date,
+      to: req.body.to,
+      amount: req.body.amount * 1,
+      what_for: req.body.what_for
+    }
+    await util.registerHistory(payment)
+    await util.addToUserHistory(payment)
+    res.send({ error: null })
+  } catch (e) {
+    console.log(e)
+    res.send({ error: 2 })
+  }
+})
+
 app.get("/oauth/discord", async (req, res) => {
   try {
     let [random_value, user_id] = req.query.state.split("_")
@@ -270,6 +369,14 @@ app.get("/oauth/discord", async (req, res) => {
     console.log(e)
   }
   res.redirect(`${process.env.FRONTEND_ORIGIN}/home`)
+})
+
+app.get("/alishackers/users/list", async (req, res) => {
+  let listUsersResult = await admin.auth().listUsers(100)
+  let users = listUsersResult.users.map(userRecord => {
+    return userRecord.toJSON()
+  })
+  res.send({ users: users })
 })
 
 app.listen(PORT, () => console.log(`Listening on ${PORT}`))
