@@ -1,5 +1,6 @@
 require("dotenv").config()
 const PORT = process.env.PORT || 5000
+const alis = require("alis")
 const rp = require("request-promise")
 const simple_oauth2 = require("simple-oauth2")
 const express = require("express")
@@ -48,13 +49,169 @@ app.use(bodyParser.json())
 let access = { following: {}, discord: {} }
 
 class util {
+  static async updateMagazinArticle(article, mid, uid) {
+    try {
+      article.removed = false
+      await firestore
+        .collection("magazines")
+        .doc(mid)
+        .collection("articles")
+        .doc(article.article_id)
+        .update(article)
+    } catch (e) {
+      await firestore
+        .collection("magazines")
+        .doc(mid)
+        .collection("articles")
+        .doc(article.article_id)
+        .set(article)
+    }
+    let ss = await firestore
+      .collection("users_server")
+      .doc(uid)
+      .collection("magazine_articles")
+      .doc(article.article_id)
+      .get()
+    let magazine = {}
+    if (ss.exists) {
+      magazine = ss.data() || {}
+    }
+    magazine["admin"] = {
+      title: "ハッカーマガジン"
+    }
+    await firestore
+      .collection("users_server")
+      .doc(uid)
+      .collection("magazine_articles")
+      .doc(article.article_id)
+      .set(magazine)
+    await firestore
+      .collection("magazines_pool")
+      .doc("admin")
+      .set({ date: Date.now() })
+  }
+  static async getUserAmount(uid) {
+    let ss = await firestore
+      .collection("users_server")
+      .doc(uid)
+      .get()
+    let user = ss.data()
+    let user_amount
+    if (user != undefined && user.amount != undefined) {
+      user_amount = user.amount
+    }
+    if (user_amount == undefined) {
+      user_amount = { aht: { paid: 0, earned: 0, tip: 0, tipped: 0 } }
+    }
+    return user_amount
+  }
+  static async tipArticle(article, amount, uid) {
+    amount *= 1
+    let date = Date.now()
+    await firestore
+      .collection("tip_pool")
+      .doc(`${article.article_id}_${uid}_${date}`)
+      .set({
+        magazine: "admin",
+        processed: false,
+        article_id: article.article_id,
+        uid: uid,
+        article_uid: article.uid,
+        amount: amount,
+        date: date
+      })
+    let user_amount = await this.getUserAmount(uid)
+    if (user_amount.aht.tip == undefined) {
+      user_amount.aht.tip = 0
+    }
+    let divider = 100000000
+    user_amount.aht.tip =
+      Math.round((user_amount.aht.tip + amount) * divider) / divider
+    await firestore
+      .collection("users_server")
+      .doc(uid)
+      .update({
+        amount: user_amount
+      })
+    console.log(user_amount)
+    let user_amount2 = await this.getUserAmount(article.uid)
+    if (user_amount2.aht.tipped == undefined) {
+      user_amount2.aht.tipped = 0
+    }
+    user_amount2.aht.tipped =
+      Math.round((user_amount2.aht.tipped + amount) * divider) / divider
+    await firestore
+      .collection("users_server")
+      .doc(article.uid)
+      .update({
+        amount: user_amount2
+      })
+    await firestore
+      .collection("users")
+      .doc(article.uid)
+      .collection("history")
+      .doc(`${date}_tip`)
+      .set({
+        date: date,
+        amount: amount,
+        article: _(article).pick(["title", "user_id", "article_id"]),
+        type: "tip"
+      })
+    await firestore
+      .collection("users")
+      .doc(uid)
+      .collection("tip")
+      .doc(`${date}`)
+      .set({
+        date: date,
+        amount: amount,
+        to: article.uid,
+        article: _(article).pick([
+          "title",
+          "user_id",
+          "article_id",
+          "user_display_name",
+          "icon_image_url"
+        ])
+      })
+  }
+  static async unpublishMagazineArticle(article, mid, uid) {
+    await firestore
+      .collection("magazines")
+      .doc(mid)
+      .collection("articles")
+      .doc(article.article_id)
+      .update({ removed: Date.now() })
+    let ss = await firestore
+      .collection("users_server")
+      .doc(uid)
+      .collection("magazine_articles")
+      .doc(article.article_id)
+      .get()
+    let magazine = {}
+    if (ss.exists) {
+      magazine = ss.data() || {}
+    }
+    delete magazine["admin"]
+    await firestore
+      .collection("users_server")
+      .doc(uid)
+      .collection("magazine_articles")
+      .doc(article.article_id)
+      .set(magazine)
+    await firestore
+      .collection("magazines_pool")
+      .doc("admin")
+      .set({ date: Date.now() })
+  }
+
   static async registerHistory(payment) {
     return await firestore
       .collection("history")
       .doc(`${payment.date}_${payment.to}_admin`)
       .set({
         amount: payment.amount,
-        type: "outsource",
+        type: payment.type,
         payment_from: "admin",
         payment_to: payment.to,
         reason: payment.what_for,
@@ -69,10 +226,10 @@ class util {
       .collection("users")
       .doc(payment.to)
       .collection("history")
-      .doc(`${payment.date}_outsource`)
+      .doc(`${payment.date}_${payment.type}`)
       .set({
         amount: payment.amount,
-        type: "outsource",
+        type: payment.type,
         payment_from: "admin",
         payment_to: payment.to,
         reason: payment.what_for,
@@ -81,30 +238,49 @@ class util {
         uid: payment.to,
         date: payment.date
       })
-    let amount = await firestore
+    let user = await firestore
       .collection("users_server")
       .doc(payment.to)
       .get()
       .then(ss => {
-        return ss.data().amount || {}
+        return ss.data()
       })
-    if (amount.aht == undefined) {
-      amount.aht = { paid: 0, earned: 0 }
+    if (user == undefined) {
+      let amount = { aht: { paid: 0, earned: payment.amount } }
+      await firestore
+        .collection("users_server")
+        .doc(payment.to)
+        .set({
+          amount: amount
+        })
+    } else {
+      let amount = user.amount || {}
+      if (amount.aht == undefined) {
+        amount.aht = { paid: 0, earned: 0 }
+      }
+      let divider = 100000000
+      amount.aht.earned =
+        Math.round((amount.aht.earned + payment.amount) * divider) / divider
+      await firestore
+        .collection("users_server")
+        .doc(payment.to)
+        .update({
+          amount: amount
+        })
     }
-    amount.aht.earned += payment.amount
-    await firestore
-      .collection("users_server")
-      .doc(payment.to)
-      .update({
-        amount: amount
-      })
-    return
   }
 
   static async existsDiscordUser(user) {
     let ss = await firestore
       .collection("discord_pool")
       .doc(user.id)
+      .get()
+    return ss.exists
+  }
+  static async existsALISUser(user) {
+    let ss = await firestore
+      .collection("alis_pool")
+      .doc(user.user_id)
       .get()
     return ss.exists
   }
@@ -127,10 +303,30 @@ class util {
       })
   }
 
+  static async addALISUserToPool(user) {
+    return await firestore
+      .collection("alis_pool")
+      .doc(user.user_id)
+      .set(user)
+      .catch(e => {
+        console.log(e)
+      })
+  }
+
   static async removeDiscordUserFromPool(user) {
     return await firestore
       .collection("discord_pool")
       .doc(user.id)
+      .delete()
+      .catch(e => {
+        console.log(e)
+      })
+  }
+
+  static async removeALISUserFromPool(user) {
+    return await firestore
+      .collection("alis_pool")
+      .doc(user.user_id)
       .delete()
       .catch(e => {
         console.log(e)
@@ -182,6 +378,16 @@ class util {
       .update({ discord: admin.firestore.FieldValue.delete() })
   }
 
+  static async removeALISUser(uid) {
+    return await firestore
+      .collection("users_server")
+      .doc(uid)
+      .update({
+        alis: admin.firestore.FieldValue.delete(),
+        is_alis: admin.firestore.FieldValue.delete()
+      })
+  }
+
   static async setDiscordUser(uid, user) {
     try {
       await firestore
@@ -193,6 +399,21 @@ class util {
         .collection("users_server")
         .doc(uid)
         .set({ discord: user })
+    }
+    return
+  }
+
+  static async setALISUser(uid, user) {
+    try {
+      await firestore
+        .collection("users_server")
+        .doc(uid)
+        .update({ is_alis: true, alis: user, is_alis_init: false })
+    } catch (e) {
+      await firestore
+        .collection("users_server")
+        .doc(uid)
+        .set({ is_alis: true, alis: user, is_alis_init: false })
     }
     return
   }
@@ -341,7 +562,8 @@ app.post("/alishackers/payment", async (req, res) => {
       date: payment_date,
       to: req.body.to,
       amount: req.body.amount * 1,
-      what_for: req.body.what_for
+      what_for: req.body.what_for,
+      type: req.body.type
     }
     await util.registerHistory(payment)
     await util.addToUserHistory(payment)
@@ -377,6 +599,102 @@ app.get("/alishackers/users/list", async (req, res) => {
     return userRecord.toJSON()
   })
   res.send({ users: users })
+})
+app.get("/alishackers/get_user/:user_id", async (req, res) => {
+  try {
+    let user = await alis.p.users.user_id.info({ user_id: req.params.user_id })
+    res.send({ user: user })
+  } catch (e) {
+    res.send({ error: e })
+  }
+})
+
+app.post("/alishackers/auth/alis/", async (req, res) => {
+  try {
+    let { random_value, uid, token } = req.body
+    await util.checkRandom_Value(uid, random_value)
+
+    let user = await alis.p.me.info({}, { id_token: token })
+    if (user == undefined || user.user_id == undefined) {
+      res.send({ error: 3 })
+    } else if (await util.existsALISUser(user)) {
+      res.send({ error: 4, user: user })
+    } else {
+      await util.setALISUser(uid, user)
+      await util.addALISUserToPool(user)
+
+      res.send({ error: null, user: user })
+    }
+  } catch (e) {
+    console.log(e)
+    res.send({ error: 2 })
+  }
+})
+
+app.post("/alishackers/remove/alis/:uid/:random_value", async (req, res) => {
+  try {
+    await util.checkRandom_Value(req.params.uid, req.params.random_value)
+    const cred = await util.getCredentials(req.params.uid)
+    if (cred.alis != undefined && cred.alis.user_id != undefined) {
+      await util.removeALISUserFromPool(cred.alis)
+    }
+    await util.removeALISUser(req.params.uid)
+    res.send({ error: null })
+  } catch (e) {
+    res.send({ error: 2 })
+  }
+})
+app.get("/alishackers/list/articles/:uid/:user_id", async (req, res) => {
+  try {
+    let articles = await alis.p.users.user_id.articles.public({
+      user_id: req.params.user_id
+    })
+    res.send({ articles: articles.Items })
+  } catch (e) {
+    console.log(e)
+    res.send({ error: 2 })
+  }
+})
+app.post("/alishackers/upload/article/", async (req, res) => {
+  try {
+    await util.checkRandom_Value(req.body.uid, req.body.random_value)
+    let article = JSON.parse(req.body.article)
+    let uid = req.body.uid
+    let mid = req.body.mid
+    article.uid = uid
+    await util.updateMagazinArticle(article, mid, uid)
+    res.send({ articles: req.body.article })
+  } catch (e) {
+    console.log(e)
+    res.send({ error: 2 })
+  }
+})
+app.post("/alishackers/unpublish/article/", async (req, res) => {
+  try {
+    await util.checkRandom_Value(req.body.uid, req.body.random_value)
+    let article = JSON.parse(req.body.article)
+    let uid = req.body.uid
+    let mid = req.body.mid
+    article.uid = uid
+    await util.unpublishMagazineArticle(article, mid, uid)
+    res.send({ articles: req.body.article })
+  } catch (e) {
+    console.log(e)
+    res.send({ error: 2 })
+  }
+})
+app.post("/alishackers/tip/", async (req, res) => {
+  try {
+    await util.checkRandom_Value(req.body.uid, req.body.random_value)
+    let article = JSON.parse(req.body.article)
+    let uid = req.body.uid
+    let amount = req.body.amount
+    await util.tipArticle(article, amount, uid)
+    res.send({ amount: amount })
+  } catch (e) {
+    console.log(e)
+    res.send({ error: 2 })
+  }
 })
 
 app.listen(PORT, () => console.log(`Listening on ${PORT}`))
