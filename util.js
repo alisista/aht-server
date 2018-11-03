@@ -41,9 +41,9 @@ for (let v of process.env.__MULTI_ENV__.split(",")) {
   }
   let serviceAccount
   try {
-    require("./.service-account" + prefix_sa + ".json")
+    serviceAccount = require("./.service-account" + prefix_sa + ".json")
   } catch (e) {
-    require("../.service-account" + prefix_sa + ".json")
+    serviceAccount = require("../.service-account" + prefix_sa + ".json")
   }
   app[v] = admin.initializeApp(
     {
