@@ -31,32 +31,30 @@ const admin = require("firebase-admin")
 
 let firestore = {}
 let app = {}
-for (let v of process.env.__MULTI_ENV__.split(",")) {
-  console.log(v + "======================================================")
-  let prefix_sa = ""
-  let prefix = ""
-  if (v !== "alishackers") {
-    prefix_sa = `.${v}`
-    prefix = `__${v.toUpperCase()}__`
-  }
-  let serviceAccount
-  try {
-    serviceAccount = require("./.service-account" + prefix_sa + ".json")
-  } catch (e) {
-    serviceAccount = require("../.service-account" + prefix_sa + ".json")
-  }
-  app[v] = admin.initializeApp(
-    {
-      credential: admin.credential.cert(serviceAccount),
-      databaseURL: process.env[`${prefix}FIRESTORE_DATABASE_URL`]
-    },
-    v
-  )
-  firestore[v] = admin.firestore(app[v])
-  firestore[v].settings({ timestampsInSnapshots: true })
-}
-console.log(app)
 class util {
+  static init(v) {
+    let prefix_sa = ""
+    let prefix = ""
+    if (v !== "alishackers") {
+      prefix_sa = `.${v}`
+      prefix = `__${v.toUpperCase()}__`
+    }
+    let serviceAccount
+    try {
+      serviceAccount = require("./.service-account" + prefix_sa + ".json")
+    } catch (e) {
+      serviceAccount = require("../.service-account" + prefix_sa + ".json")
+    }
+    app[v] = admin.initializeApp(
+      {
+        credential: admin.credential.cert(serviceAccount),
+        databaseURL: process.env[`${prefix}FIRESTORE_DATABASE_URL`]
+      },
+      v
+    )
+    firestore[v] = admin.firestore(app[v])
+    firestore[v].settings({ timestampsInSnapshots: true })
+  }
   static async listUsers(prefix) {
     return await admin.auth(app[prefix]).listUsers(100)
   }

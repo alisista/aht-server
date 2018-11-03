@@ -1,7 +1,7 @@
 const alis = require("alis")
 const util = require("./util")
 
-module.exports = [
+let routes = [
   {
     route: "/check/following/:target_id",
     func: async (req, res) => {
@@ -250,3 +250,15 @@ module.exports = [
     }
   }
 ]
+class Routes {
+  constructor(namespace = "alishackers") {
+    this.namespace = namespace
+    this.routes = routes
+    this.initUtil()
+  }
+  initUtil() {
+    util.init(this.namespace)
+  }
+}
+
+module.exports = Routes
