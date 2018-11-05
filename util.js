@@ -31,6 +31,7 @@ const admin = require("firebase-admin")
 
 let firestore = {}
 let app = {}
+let access = { following: {}, discord: {} }
 class util {
   static init(v) {
     let prefix_sa = ""
@@ -428,10 +429,12 @@ class util {
     return
   }
 
-  static async getDiscordTokens(code) {
+  static async getDiscordTokens(prefix, code) {
     return await oauth2_discord.authorizationCode.getToken({
       code: code,
-      redirect_uri: `${process.env.BACKEND_SERVER_ORIGIN}/oauth/discord`
+      redirect_uri: `${
+        process.env.BACKEND_SERVER_ORIGIN
+      }/${prefix}/oauth/discord`
     })
   }
 
@@ -477,8 +480,8 @@ class util {
     )
   }
 
-  static checkRandom_Value(user_id, random_value, res) {
-    return firestore
+  static checkRandom_Value(prefix, user_id, random_value, res) {
+    return firestore[prefix]
       .collection("users")
       .doc(user_id)
       .get()

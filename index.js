@@ -16,7 +16,7 @@ for (let v of ["get", "post"]) {
     next()
   })
 }
-let routes = new Routes()
+let routes = new Routes(process.argv[2] || "alishackers")
 let namespace = routes.namespace
 for (let v of routes.routes) {
   let method = v.method || "get"

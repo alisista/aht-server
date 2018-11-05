@@ -56,7 +56,11 @@ let routes = [
     method: "post",
     func: async (req, res) => {
       try {
-        await util.checkRandom_Value(req.params.uid, req.params.random_value)
+        await util.checkRandom_Value(
+          req.PREFIX,
+          req.params.uid,
+          req.params.random_value
+        )
         const cred = await util.getCredentials(req.PREFIX, req.params.uid)
         if (cred.discord != undefined && cred.discord.id != undefined) {
           await util.removeDiscordUserFromPool(req.PREFIX, cred.discord)
@@ -73,9 +77,15 @@ let routes = [
     method: "post",
     func: async (req, res) => {
       try {
-        await util.checkRandom_Value(req.body.uid, req.body.random_value)
+        await util.checkRandom_Value(
+          req.PREFIX,
+          req.body.uid,
+          req.body.random_value
+        )
         if (util.checkAdmin(req.body.twitter_id) !== true) {
-          throw "not admin"
+          if (req.PREFIX !== "testnet" || req.body.type != "faucet") {
+            throw "not admin"
+          }
         }
         let payment_date = Date.now()
         let payment = {
@@ -101,8 +111,8 @@ let routes = [
     func: async (req, res) => {
       try {
         let [random_value, user_id] = req.query.state.split("_")
-        await util.checkRandom_Value(user_id, random_value)
-        let tokens = await util.getDiscordTokens(req.query.code)
+        await util.checkRandom_Value(req.PREFIX, user_id, random_value)
+        let tokens = await util.getDiscordTokens(req.PREFIX, req.query.code)
         let discord_user = await util.getDiscordUser(tokens.access_token)
         if (await util.existsDiscordUser(req.PREFIX, discord_user)) {
           return res.redirect(`${process.env.FRONTEND_ORIGIN}/home?error=1`)
@@ -146,7 +156,7 @@ let routes = [
     func: async (req, res) => {
       try {
         let { random_value, uid, token } = req.body
-        await util.checkRandom_Value(uid, random_value)
+        await util.checkRandom_Value(req.PREFIX, uid, random_value)
 
         let user = await alis.p.me.info({}, { id_token: token })
         if (user == undefined || user.user_id == undefined) {
@@ -170,7 +180,11 @@ let routes = [
     method: "post",
     func: async (req, res) => {
       try {
-        await util.checkRandom_Value(req.params.uid, req.params.random_value)
+        await util.checkRandom_Value(
+          req.PREFIX,
+          req.params.uid,
+          req.params.random_value
+        )
         const cred = await util.getCredentials(req.PREFIX, req.params.uid)
         if (cred.alis != undefined && cred.alis.user_id != undefined) {
           await util.removeALISUserFromPool(req.PREFIX, cred.alis)
@@ -201,7 +215,11 @@ let routes = [
     method: "post",
     func: async (req, res) => {
       try {
-        await util.checkRandom_Value(req.body.uid, req.body.random_value)
+        await util.checkRandom_Value(
+          req.PREFIX,
+          req.body.uid,
+          req.body.random_value
+        )
         let article = JSON.parse(req.body.article)
         let uid = req.body.uid
         let mid = req.body.mid
@@ -219,7 +237,11 @@ let routes = [
     method: "post",
     func: async (req, res) => {
       try {
-        await util.checkRandom_Value(req.body.uid, req.body.random_value)
+        await util.checkRandom_Value(
+          req.PREFIX,
+          req.body.uid,
+          req.body.random_value
+        )
         let article = JSON.parse(req.body.article)
         let uid = req.body.uid
         let mid = req.body.mid
@@ -237,7 +259,11 @@ let routes = [
     method: "post",
     func: async (req, res) => {
       try {
-        await util.checkRandom_Value(req.body.uid, req.body.random_value)
+        await util.checkRandom_Value(
+          req.PREFIX,
+          req.body.uid,
+          req.body.random_value
+        )
         let article = JSON.parse(req.body.article)
         let uid = req.body.uid
         let amount = req.body.amount
