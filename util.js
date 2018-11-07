@@ -32,6 +32,19 @@ const admin = require("firebase-admin")
 let firestore = {}
 let app = {}
 let access = { following: {}, discord: {} }
+
+//dropbox
+const Dropbox = require("dropbox").Dropbox
+
+const dropbox_credentials = {
+  app_key: process.env.DROPBOX_APP_KEY,
+  app_secret: process.env.DROPBOX_APP_SECRET,
+  app_access_token: process.env.DROPBOX_APP_ACCESS_TOKEN
+}
+const dropbox = new Dropbox({
+  accessToken: dropbox_credentials.app_access_token
+})
+
 class util {
   static init(v) {
     let prefix_sa = ""
@@ -56,10 +69,82 @@ class util {
     firestore[v] = admin.firestore(app[v])
     firestore[v].settings({ timestampsInSnapshots: true })
   }
+  static async updateMagazine(prefix, file_id) {
+    console.log(file_id)
+    await firestore[prefix]
+      .collection("magazines_updates")
+      .doc(file_id)
+      .set({ date: Date.now() })
+  }
+  static async addMagazine(prefix, magazine) {
+    try {
+      await firestore[prefix]
+        .collection("magazines")
+        .doc(magazine.file_id)
+        .update(magazine)
+    } catch (e) {
+      await firestore[prefix]
+        .collection("magazines")
+        .doc(magazine.file_id)
+        .set(magazine)
+    }
+  }
+  static async deleteMagazine(prefix, magazine) {
+    try {
+      await firestore[prefix]
+        .collection("magazines")
+        .doc(magazine.file_id)
+        .update(magazine)
+    } catch (e) {}
+  }
+
+  static async addMagazineToUser(prefix, magazine) {
+    try {
+      await firestore[prefix]
+        .collection("users_server")
+        .doc(magazine.owner)
+        .collection("magazines")
+        .doc(magazine.file_id)
+        .update(magazine)
+    } catch (e) {
+      await firestore[prefix]
+        .collection("users_server")
+        .doc(magazine.owner)
+        .collection("magazines")
+        .doc(magazine.file_id)
+        .set(magazine)
+    }
+  }
+  static async deleteMagazineToUser(prefix, magazine) {
+    try {
+      await firestore[prefix]
+        .collection("users_server")
+        .doc(magazine.owner)
+        .collection("magazines")
+        .doc(magazine.file_id)
+        .update(magazine)
+    } catch (e) {}
+  }
+
+  static async dropMagazine(magazine) {
+    const file_path = `/magazines/${magazine.id}.json`
+    await dropbox.filesUpload({
+      path: file_path,
+      contents: JSON.stringify(magazine),
+      mode: "overwrite"
+    })
+    const result = await dropbox.sharingCreateSharedLink({
+      path: file_path,
+      short_url: false
+    })
+    const file_url = result.url.replace(/\?dl=0$/, "")
+    const file_id = file_url.split("/")[4]
+    return file_id
+  }
   static async listUsers(prefix) {
     return await admin.auth(app[prefix]).listUsers(100)
   }
-  static async updateMagazinArticle(prefix, article, mid, uid) {
+  static async updateMagazineArticle(prefix, article, mid, uid) {
     try {
       article.removed = false
       await firestore[prefix]
@@ -86,8 +171,8 @@ class util {
     if (ss.exists) {
       magazine = ss.data() || {}
     }
-    magazine["admin"] = {
-      title: "ハッカーマガジン"
+    magazine[mid] = {
+      date: Date.now()
     }
     await firestore[prefix]
       .collection("users_server")
@@ -97,7 +182,7 @@ class util {
       .set(magazine)
     await firestore[prefix]
       .collection("magazines_pool")
-      .doc("admin")
+      .doc(mid)
       .set({ date: Date.now() })
   }
   static async getUserAmount(prefix, uid) {
@@ -115,14 +200,14 @@ class util {
     }
     return user_amount
   }
-  static async tipArticle(prefix, article, amount, uid) {
+  static async tipArticle(prefix, article, amount, uid, magazine_id) {
     amount *= 1
     let date = Date.now()
     await firestore[prefix]
       .collection("tip_pool")
       .doc(`${article.article_id}_${uid}_${date}`)
       .set({
-        magazine: "admin",
+        magazine: magazine_id,
         processed: false,
         article_id: article.article_id,
         uid: uid,
@@ -164,6 +249,7 @@ class util {
       .set({
         date: date,
         amount: amount,
+        magazine_id: magazine_id,
         article: _(article).pick(["title", "user_id", "article_id"]),
         type: "tip"
       })
@@ -175,6 +261,7 @@ class util {
       .set({
         date: date,
         amount: amount,
+        magazine_id: magazine_id,
         to: article.uid,
         article: _(article).pick([
           "title",
@@ -202,7 +289,7 @@ class util {
     if (ss.exists) {
       magazine = ss.data() || {}
     }
-    delete magazine["admin"]
+    delete magazine[mid]
     await firestore[prefix]
       .collection("users_server")
       .doc(uid)
@@ -211,7 +298,7 @@ class util {
       .set(magazine)
     await firestore[prefix]
       .collection("magazines_pool")
-      .doc("admin")
+      .doc(mid)
       .set({ date: Date.now() })
   }
 

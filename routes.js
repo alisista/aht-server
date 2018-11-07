@@ -3,6 +3,76 @@ const util = require("./util")
 
 let routes = [
   {
+    route: "/magazine/issue/:uid/:random_value",
+    method: "post",
+    func: async (req, res) => {
+      try {
+        await util.checkRandom_Value(
+          req.PREFIX,
+          req.params.uid,
+          req.params.random_value
+        )
+        let magazine = {
+          editors: req.body.editors,
+          id: req.body.id,
+          title: req.body.title,
+          owner: req.body.owner,
+          created_at: Date.now()
+        }
+        if (req.body.description != undefined) {
+          magazine.description = req.body.description
+        }
+        let file_id
+        if (req.body.is_edit) {
+          file_id = req.body.file_id
+          await util.updateMagazine(req.PREFIX, file_id)
+        } else {
+          file_id = await util.dropMagazine(magazine)
+        }
+        magazine.file_id = file_id
+        await util.addMagazine(req.PREFIX, magazine)
+        await util.addMagazineToUser(req.PREFIX, magazine)
+        res.send(magazine)
+      } catch (e) {
+        console.log(e)
+        res.send({ error: 2 })
+      }
+    }
+  },
+  {
+    route: "/magazine/delete/:uid/:random_value",
+    method: "post",
+    func: async (req, res) => {
+      try {
+        await util.checkRandom_Value(
+          req.PREFIX,
+          req.params.uid,
+          req.params.random_value
+        )
+        let magazine = {
+          editors: req.body.editors,
+          id: req.body.id,
+          title: req.body.title,
+          owner: req.body.owner,
+          created_at: Date.now()
+        }
+        if (req.body.description != undefined) {
+          magazine.description = req.body.description
+        }
+        let file_id = req.body.file_id
+        magazine.file_id = file_id
+        magazine.deleted = Date.now()
+        await util.dropMagazine(magazine)
+        await util.deleteMagazine(req.PREFIX, magazine)
+        await util.deleteMagazineToUser(req.PREFIX, magazine)
+        res.send(magazine)
+      } catch (e) {
+        console.log(e)
+        res.send({ error: 2 })
+      }
+    }
+  },
+  {
     route: "/check/following/:target_id",
     func: async (req, res) => {
       const target = req.params.target_id
@@ -198,12 +268,21 @@ let routes = [
   },
   {
     route: "/list/articles/:uid/:user_id",
+    method: "post",
     func: async (req, res) => {
       try {
-        let articles = await alis.p.users.user_id.articles.public({
+        let obj = {
           user_id: req.params.user_id
+        }
+        if (req.body["LastEvaluatedKey[sort_key]"] != undefined) {
+          obj.sort_key = req.body["LastEvaluatedKey[sort_key]"]
+          obj.article_id = req.body["LastEvaluatedKey[article_id]"]
+        }
+        let articles = await alis.p.users.user_id.articles.public(obj)
+        res.send({
+          articles: articles.Items,
+          LastEvaluatedKey: articles.LastEvaluatedKey
         })
-        res.send({ articles: articles.Items })
       } catch (e) {
         console.log(e)
         res.send({ error: 2 })
@@ -224,7 +303,7 @@ let routes = [
         let uid = req.body.uid
         let mid = req.body.mid
         article.uid = uid
-        await util.updateMagazinArticle(req.PREFIX, article, mid, uid)
+        await util.updateMagazineArticle(req.PREFIX, article, mid, uid)
         res.send({ articles: req.body.article })
       } catch (e) {
         console.log(e)
@@ -267,7 +346,13 @@ let routes = [
         let article = JSON.parse(req.body.article)
         let uid = req.body.uid
         let amount = req.body.amount
-        await util.tipArticle(req.PREFIX, article, amount, uid)
+        await util.tipArticle(
+          req.PREFIX,
+          article,
+          amount,
+          uid,
+          req.body.magazine_id
+        )
         res.send({ amount: amount })
       } catch (e) {
         console.log(e)
