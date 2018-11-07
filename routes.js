@@ -22,8 +22,9 @@ let routes = [
         if (req.body.description != undefined) {
           magazine.description = req.body.description
         }
+        console.log(req.body)
         let file_id
-        if (req.body.is_edit) {
+        if (req.body.is_edit == "true") {
           file_id = req.body.file_id
           await util.updateMagazine(req.PREFIX, file_id)
         } else {

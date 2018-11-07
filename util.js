@@ -35,15 +35,8 @@ let access = { following: {}, discord: {} }
 
 //dropbox
 const Dropbox = require("dropbox").Dropbox
-
-const dropbox_credentials = {
-  app_key: process.env.DROPBOX_APP_KEY,
-  app_secret: process.env.DROPBOX_APP_SECRET,
-  app_access_token: process.env.DROPBOX_APP_ACCESS_TOKEN
-}
-const dropbox = new Dropbox({
-  accessToken: dropbox_credentials.app_access_token
-})
+let dropbox_credentials
+let dropbox
 
 class util {
   static init(v) {
@@ -68,6 +61,14 @@ class util {
     )
     firestore[v] = admin.firestore(app[v])
     firestore[v].settings({ timestampsInSnapshots: true })
+    dropbox_credentials = {
+      app_key: process.env[`${prefix}DROPBOX_APP_KEY`],
+      app_secret: process.env[`${prefix}DROPBOX_APP_SECRET`],
+      app_access_token: process.env[`${prefix}DROPBOX_APP_ACCESS_TOKEN`]
+    }
+    dropbox = new Dropbox({
+      accessToken: dropbox_credentials.app_access_token
+    })
   }
   static async updateMagazine(prefix, file_id) {
     console.log(file_id)
