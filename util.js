@@ -71,11 +71,27 @@ class util {
     })
   }
   static async updateMagazine(prefix, file_id) {
-    console.log(file_id)
     await firestore[prefix]
       .collection("magazines_updates")
       .doc(file_id)
       .set({ date: Date.now() })
+  }
+  static async checkMagazineID(prefix, id) {
+    let ss = await firestore[prefix]
+      .collection("magazines_ids")
+      .doc(id)
+      .get()
+    return ss.exists
+  }
+  static async addMagazineID(prefix, magazine) {
+    let ss = await firestore[prefix]
+      .collection("magazines_ids")
+      .doc(magazine.url_id)
+      .set({
+        id: magazine.id,
+        file_id: magazine.file_id,
+        url_id: magazine.url_id
+      })
   }
   static async addMagazine(prefix, magazine) {
     try {

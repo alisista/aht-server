@@ -3,6 +3,20 @@ const util = require("./util")
 
 let routes = [
   {
+    route: "/check/magazine_id",
+    method: "post",
+    func: async (req, res) => {
+      try {
+        let id = req.body.magazine_id
+        let exists = await util.checkMagazineID(req.PREFIX, id)
+        res.send({ exists: exists })
+      } catch (e) {
+        console.log(e)
+        res.send({ error: 2 })
+      }
+    }
+  },
+  {
     route: "/magazine/issue/:uid/:random_value",
     method: "post",
     func: async (req, res) => {
@@ -12,28 +26,42 @@ let routes = [
           req.params.uid,
           req.params.random_value
         )
-        let magazine = {
-          editors: req.body.editors,
-          id: req.body.id,
-          title: req.body.title,
-          owner: req.body.owner,
-          created_at: Date.now()
+        let exists = false
+        if (req.body.set_id === "true") {
+          exists = await util.checkMagazineID(req.PREFIX, req.body.url_id)
         }
-        if (req.body.description != undefined) {
-          magazine.description = req.body.description
-        }
-        console.log(req.body)
-        let file_id
-        if (req.body.is_edit == "true") {
-          file_id = req.body.file_id
-          await util.updateMagazine(req.PREFIX, file_id)
+        if (exists) {
+          res.send({ error: 3 })
         } else {
-          file_id = await util.dropMagazine(magazine)
+          let magazine = {
+            editors: req.body.editors,
+            id: req.body.id,
+            title: req.body.title,
+            owner: req.body.owner,
+            created_at: Date.now()
+          }
+          if (req.body.description != undefined) {
+            magazine.description = req.body.description
+          }
+          if (req.body.url_id != undefined) {
+            magazine.url_id = req.body.url_id
+          }
+
+          let file_id
+          if (req.body.is_edit === "true") {
+            file_id = req.body.file_id
+            await util.updateMagazine(req.PREFIX, file_id)
+          } else {
+            file_id = await util.dropMagazine(magazine)
+          }
+          magazine.file_id = file_id
+          if (req.body.is_edit !== "true") {
+            await util.addMagazineID(req.PREFIX, magazine)
+          }
+          await util.addMagazine(req.PREFIX, magazine)
+          await util.addMagazineToUser(req.PREFIX, magazine)
+          res.send(magazine)
         }
-        magazine.file_id = file_id
-        await util.addMagazine(req.PREFIX, magazine)
-        await util.addMagazineToUser(req.PREFIX, magazine)
-        res.send(magazine)
       } catch (e) {
         console.log(e)
         res.send({ error: 2 })
