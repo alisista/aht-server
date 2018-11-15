@@ -55,7 +55,7 @@ let routes = [
             file_id = await util.dropMagazine(magazine)
           }
           magazine.file_id = file_id
-          if (req.body.is_edit !== "true") {
+          if (req.body.set_id === "true") {
             await util.addMagazineID(req.PREFIX, magazine)
           }
           await util.addMagazine(req.PREFIX, magazine)
