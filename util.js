@@ -218,6 +218,16 @@ class util {
     return user_amount
   }
   static async tipArticle(prefix, article, amount, uid, magazine_id) {
+    let ss = await firestore[prefix]
+      .collection("alis_pool")
+      .doc(article.user_id)
+      .get()
+    let alisista
+    if (ss.exists == false || ss.data().uid == undefined) {
+      return false
+    } else {
+      alisista = ss.data().uid
+    }
     amount *= 1
     let date = Date.now()
     await firestore[prefix]
@@ -228,7 +238,7 @@ class util {
         processed: false,
         article_id: article.article_id,
         uid: uid,
-        article_uid: article.uid,
+        article_uid: alisista,
         amount: amount,
         date: date
       })
@@ -246,7 +256,7 @@ class util {
         amount: user_amount
       })
     console.log(user_amount)
-    let user_amount2 = await this.getUserAmount(prefix, article.uid)
+    let user_amount2 = await this.getUserAmount(prefix, alisista)
     if (user_amount2.aht.tipped == undefined) {
       user_amount2.aht.tipped = 0
     }
@@ -254,13 +264,13 @@ class util {
       Math.round((user_amount2.aht.tipped + amount) * divider) / divider
     await firestore[prefix]
       .collection("users_server")
-      .doc(article.uid)
+      .doc(alisista)
       .update({
         amount: user_amount2
       })
     await firestore[prefix]
       .collection("users")
-      .doc(article.uid)
+      .doc(alisista)
       .collection("history")
       .doc(`${date}_tip`)
       .set({
@@ -279,7 +289,7 @@ class util {
         date: date,
         amount: amount,
         magazine_id: magazine_id,
-        to: article.uid,
+        to: alisista,
         article: _(article).pick([
           "title",
           "user_id",
@@ -288,6 +298,7 @@ class util {
           "icon_image_url"
         ])
       })
+    return true
   }
   static async unpublishMagazineArticle(prefix, article, mid, uid) {
     await firestore[prefix]

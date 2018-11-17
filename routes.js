@@ -263,6 +263,7 @@ let routes = [
         } else if (await util.existsALISUser(req.PREFIX, user)) {
           res.send({ error: 4, user: user })
         } else {
+          user.uid = uid
           await util.setALISUser(req.PREFIX, uid, user)
           await util.addALISUserToPool(req.PREFIX, user)
 
@@ -300,14 +301,50 @@ let routes = [
     method: "post",
     func: async (req, res) => {
       try {
-        let obj = {
-          user_id: req.params.user_id
+        let articles = {}
+        if (req.body.search == "search") {
+          let obj = {
+            query: req.params.user_id
+          }
+          if (req.body["LastEvaluatedKey"] != undefined) {
+            obj.page = req.body["LastEvaluatedKey"]
+          }
+          let result = await alis.p.search.articles(obj)
+          articles.Items = result
+        } else if (req.body.search == "tag") {
+          let obj = {
+            tag: req.params.user_id
+          }
+
+          if (req.body["LastEvaluatedKey"] != undefined) {
+            obj.page = req.body["LastEvaluatedKey"]
+          }
+          let result = await alis.p.search.articles(obj)
+          articles.Items = result
+        } else if (req.body.search == "id") {
+          let obj = {
+            article_id: req.params.user_id
+          }
+
+          let article = await alis.p.articles.article_id(obj)
+          if (article != undefined) {
+            delete article.body
+            articles.Items = [article]
+          } else {
+            res.send({ error: 4 })
+            return
+          }
+        } else {
+          let obj = {
+            user_id: req.params.user_id
+          }
+
+          if (req.body["LastEvaluatedKey[sort_key]"] != undefined) {
+            obj.sort_key = req.body["LastEvaluatedKey[sort_key]"]
+            obj.article_id = req.body["LastEvaluatedKey[article_id]"]
+          }
+          articles = await alis.p.users.user_id.articles.public(obj)
         }
-        if (req.body["LastEvaluatedKey[sort_key]"] != undefined) {
-          obj.sort_key = req.body["LastEvaluatedKey[sort_key]"]
-          obj.article_id = req.body["LastEvaluatedKey[article_id]"]
-        }
-        let articles = await alis.p.users.user_id.articles.public(obj)
         res.send({
           articles: articles.Items,
           LastEvaluatedKey: articles.LastEvaluatedKey
@@ -375,14 +412,14 @@ let routes = [
         let article = JSON.parse(req.body.article)
         let uid = req.body.uid
         let amount = req.body.amount
-        await util.tipArticle(
+        let tip = await util.tipArticle(
           req.PREFIX,
           article,
           amount,
           uid,
           req.body.magazine_id
         )
-        res.send({ amount: amount })
+        res.send({ tip: tip, amount: amount })
       } catch (e) {
         console.log(e)
         res.send({ error: 2 })
