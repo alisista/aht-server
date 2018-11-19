@@ -7,7 +7,7 @@ let routes = [
     method: "post",
     func: async (req, res) => {
       try {
-        let id = req.body.magazine_id
+        let id = req.body.magazine_id.toLowerCase()
         let exists = await util.checkMagazineID(req.PREFIX, id)
         res.send({ exists: exists })
       } catch (e) {
@@ -28,7 +28,10 @@ let routes = [
         )
         let exists = false
         if (req.body.set_id === "true") {
-          exists = await util.checkMagazineID(req.PREFIX, req.body.url_id)
+          exists = await util.checkMagazineID(
+            req.PREFIX,
+            req.body.url_id.toLowerCase()
+          )
         }
         if (exists) {
           res.send({ error: 3 })
@@ -44,7 +47,8 @@ let routes = [
             magazine.description = req.body.description
           }
           if (req.body.url_id != undefined) {
-            magazine.url_id = req.body.url_id
+            magazine.url_id = req.body.url_id.toLowerCase()
+            magazine.url_id_original = req.body.url_id
           }
 
           let file_id

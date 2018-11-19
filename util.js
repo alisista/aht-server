@@ -77,21 +77,27 @@ class util {
       .set({ date: Date.now() })
   }
   static async checkMagazineID(prefix, id) {
-    let ss = await firestore[prefix]
-      .collection("magazines_ids")
-      .doc(id)
-      .get()
-    return ss.exists
+    if (id.toLowerCase() === "admin") {
+      return true
+    } else {
+      let ss = await firestore[prefix]
+        .collection("magazines_ids")
+        .doc(id)
+        .get()
+      return ss.exists
+    }
   }
   static async addMagazineID(prefix, magazine) {
+    let obj = {}
+    for (let v of ["id", "file_id", "url_id", "url_id_original"]) {
+      if (magazine[v] != undefined) {
+        obj[v] = magazine[v]
+      }
+    }
     let ss = await firestore[prefix]
       .collection("magazines_ids")
       .doc(magazine.url_id)
-      .set({
-        id: magazine.id,
-        file_id: magazine.file_id,
-        url_id: magazine.url_id
-      })
+      .set(obj)
   }
   static async addMagazine(prefix, magazine) {
     try {
