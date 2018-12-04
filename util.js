@@ -208,7 +208,7 @@ class util {
       .doc(mid)
       .set({ date: Date.now() })
   }
-  static async getUserAmount(prefix, uid) {
+  static async getUserAmount(prefix, uid, asset = "aht") {
     let ss = await firestore[prefix]
       .collection("users_server")
       .doc(uid)
@@ -221,9 +221,27 @@ class util {
     if (user_amount == undefined) {
       user_amount = { aht: { paid: 0, earned: 0, tip: 0, tipped: 0 } }
     }
+    if (user_amount[asset] == undefined) {
+      let asset_ss = await firestore[prefix]
+        .collection("assets")
+        .doc(asset)
+        .get()
+      user_amount[asset] = { paid: 0, earned: 0, tip: 0, tipped: 0 }
+      if (asset_ss.exists) {
+        let asset_data = asset_ss.data()
+        user_amount[asset].name = asset_data.name
+      }
+    }
     return user_amount
   }
-  static async tipArticle(prefix, article, amount, uid, magazine_id) {
+  static async tipArticle(
+    prefix,
+    article,
+    amount,
+    uid,
+    magazine_id,
+    asset = "aht"
+  ) {
     let ss = await firestore[prefix]
       .collection("alis_pool")
       .doc(article.user_id)
@@ -236,6 +254,8 @@ class util {
     }
     amount *= 1
     let date = Date.now()
+    let user_amount = await this.getUserAmount(prefix, uid, asset)
+    let asset_name = user_amount[asset].name || "AHT"
     await firestore[prefix]
       .collection("tip_pool")
       .doc(`${article.article_id}_${uid}_${date}`)
@@ -246,28 +266,28 @@ class util {
         uid: uid,
         article_uid: alisista,
         amount: amount,
-        date: date
+        date: date,
+        asset: asset,
+        asset_name: asset_name
       })
-    let user_amount = await this.getUserAmount(prefix, uid)
-    if (user_amount.aht.tip == undefined) {
-      user_amount.aht.tip = 0
+    if (user_amount[asset].tip == undefined) {
+      user_amount[asset].tip = 0
     }
     let divider = 100000000
-    user_amount.aht.tip =
-      Math.round((user_amount.aht.tip + amount) * divider) / divider
+    user_amount[asset].tip =
+      Math.round((user_amount[asset].tip + amount) * divider) / divider
     await firestore[prefix]
       .collection("users_server")
       .doc(uid)
       .update({
         amount: user_amount
       })
-    console.log(user_amount)
-    let user_amount2 = await this.getUserAmount(prefix, alisista)
-    if (user_amount2.aht.tipped == undefined) {
-      user_amount2.aht.tipped = 0
+    let user_amount2 = await this.getUserAmount(prefix, alisista, asset)
+    if (user_amount2[asset].tipped == undefined) {
+      user_amount2[asset].tipped = 0
     }
-    user_amount2.aht.tipped =
-      Math.round((user_amount2.aht.tipped + amount) * divider) / divider
+    user_amount2[asset].tipped =
+      Math.round((user_amount2[asset].tipped + amount) * divider) / divider
     await firestore[prefix]
       .collection("users_server")
       .doc(alisista)
@@ -280,6 +300,8 @@ class util {
       .collection("history")
       .doc(`${date}_tip`)
       .set({
+        asset_name: asset_name,
+        asset: asset,
         date: date,
         amount: amount,
         magazine_id: magazine_id,
@@ -292,6 +314,8 @@ class util {
       .collection("tip")
       .doc(`${date}`)
       .set({
+        asset_name: asset_name,
+        asset: asset,
         date: date,
         amount: amount,
         magazine_id: magazine_id,

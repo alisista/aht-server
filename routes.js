@@ -421,9 +421,10 @@ let routes = [
           article,
           amount,
           uid,
-          req.body.magazine_id
+          req.body.magazine_id,
+          req.body.asset
         )
-        res.send({ tip: tip, amount: amount })
+        res.send({ tip: tip, amount: amount, asset: req.body.asset || "aht" })
       } catch (e) {
         console.log(e)
         res.send({ error: 2 })
